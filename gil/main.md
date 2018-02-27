@@ -1,10 +1,28 @@
 # DEBUGGING PYTHON THREADS
 
-## What is the GIL?
+## What is the Global Interpreter Lock (GIL)?
 - Single lock in CPython interpreter that allows a Python thread to run
-- Only 1
-- Python process allows 1 main thread, arbitrary children threads, and a Single
-lock that allows a thread to run
+- Python process allows 1 main thread, ~~arbitrary~~ children threads, and a lock that allows a thread to run
+- GIL protects pointer to PyThreadState
+  - PyThreadState saved before interpreter allows spawning of child thread
+  - C macros in interpreter handle allowing and ending allowance of threads
+  - Thread state is restored after child threads return with state that was saved before threads spawned
+- GIL is not held by third party library or C threads
+  - If a call to Python is necessary from these threads than a callback API is usually provided with the library
+  - Idiom for handling GIL python thread state from external thread CallSomeFunction
+    ```c
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+
+    /* Perform Python actions here. */
+    result = CallSomeFunction();
+    /* evaluate result or handle exception */
+
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+
+    ```
+
 - The GIL located at ceval_gil.h, following block are comments from file
   ```
   Notes about the implementation:
@@ -49,19 +67,16 @@ lock that allows a thread to run
 - Header file that defines PyThread_type_lock
   - /Users/matthewmcguire/.pyenv/versions/3.6.2/Python.framework/Versions/3.6/include/python3.6m/pythread.h
 
-## Is Python multi-threaded or good at context switching?
 
 ## Python Threads Good At:
-- IO
-- Sleeping
-- Blocking
+- Potentially blocking I/O calls and sleeping
 
 ## Python Threads Bad At:
 - Comms
   - Valuable data lost between threads by default
   - Decorators for passing data between threads
   - Need to maintain record for chain of execution
-- Concurrency - in the historical sense, context switching more accurate
+- Concurrency - fast context switching more accurate
 
 ## Tools for debugging Python threads
 
@@ -73,11 +88,23 @@ lock that allows a thread to run
   - Matplotlib for graphing
 
 ### Debugging
+- Idiom for passing thread data through chain / decorators to do this
 - ipython
   - Needs some lines of debug code to file
 - rpdb
 - Disassembler
 
+
+# NEED ANSWERS
+- Interpreter is not thread safe:
+  - ~~How is memory accessed for each thread when GIL is held~~
+    - All python threads have access to all memory in python process
+  - How does Python know what section of memory to read from
+    - PyThreadState is saved, whats in this object
+    - Does it have memory state snapshot for thread
+    - Does a thread create its own stacks
+      - Data stack
+      - Instruction stack
 
 
 # Random Notes
@@ -96,6 +123,6 @@ lock that allows a thread to run
   - Data stacks on Frames
   - Way to run Frames
 
-- c_eval.c
-  - 1500 line switch statement for op-codes
+- ceval.c
+  - 2.7 1500 line switch statement for op-codes
   - Python3 computed go-to's
